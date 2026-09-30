@@ -1,6 +1,7 @@
 import request from 'supertest';
 import { fakeFacilitator, PAY_TO, testConfig } from './helpers';
 import { createApp } from '../src/app';
+import { PAID_ROUTES } from '../src/catalog';
 import { ALGORAND_TESTNET } from '../src/config';
 import examples from '../src/examples.json';
 
@@ -79,6 +80,12 @@ describe('free routes', () => {
     expect(vp.responses['200'].content['application/json'].example).toEqual(
       examples.vp
     );
+    for (const route of PAID_ROUTES) {
+      const content = res.body.paths[route.path].get.responses['200'].content;
+      expect(content['application/json'].example).toEqual(
+        route.discovery.output?.example
+      );
+    }
     for (const path of FREE_PATHS.filter(path => path !== '/og.png')) {
       expect(res.body.paths).toHaveProperty([path]);
     }

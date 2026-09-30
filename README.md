@@ -1,187 +1,166 @@
 # snapshot-x402
 
-Pay-per-request [Snapshot](https://snapshot.box) governance data for AI agents, paid in USDC on Algorand with [x402](https://x402.org).
+## What this is
 
-Snapshot is the off-chain voting platform behind ENS, Aave, Arbitrum and thousands of DAOs. This API gives agents, bots and dashboards clean JSON for spaces, proposals with live results, votes and voting power. There is no API key, no signup and no subscription: every call is paid on its own through x402 v2 and settled by the [GoPlausible facilitator](https://facilitator.goplausible.xyz), which also pays the Algorand network fee. The buyer only needs USDC.
+An HTTP API for [Snapshot](https://snapshot.box) governance data: spaces, proposals with live results, votes and voting power for ENS, Aave, Arbitrum and other DAOs.
+Each call is paid in USDC on Algorand with [x402](https://x402.org) v2. There is no API key or signup, and the [GoPlausible facilitator](https://facilitator.goplausible.xyz) settles each payment and pays the network fee.
+It is an entry in the Algorand x402 Global Challenge.
 
-## Endpoints
+## Pay for a call in 5 minutes
 
-| Route                                                           | Price (USDC) | Returns                                                                   |
-| --------------------------------------------------------------- | ------------ | ------------------------------------------------------------------------- |
-| `GET /v1/spaces/{id}`                                           | 0.01         | Space profile, strategies, voting settings, activity stats                |
-| `GET /v1/spaces/{id}/proposals?state=&first=&skip=`             | 0.01         | Proposals, newest first, with scores (`state`: active, pending, closed)   |
-| `GET /v1/proposals/{id}?include=body`                           | 0.01         | Proposal with per-choice results, leading choice, quorum, strategies      |
-| `GET /v1/proposals/{id}/votes?first=&skip=&orderBy=vp\|created` | 0.01         | Votes with choice, choice label, voting power per strategy and reason     |
-| `GET /v1/vp?voter=&space=&proposal=`                            | 0.02         | Voting power of an address, per strategy                                  |
-| `GET /`, `/openapi.json`, `/llms.txt`                           | free         | Service description (HTML, or JSON with `Accept: application/json`), docs |
-| `GET /healthz`                                                  | free         | Liveness                                                                  |
-
-Lists return `hasMore` and `next` (relative URL of the next page, or `null`); votes also return `total`. Errors are always `{"error": {"code", "message"}}`. Prices, network and receiving address come from the environment (see [Configuration](#configuration)).
-
-## How to pay
+This uses Algorand TestNet, where USDC is free. You need Node 22.13 or newer, Yarn 1 and a clone of this repository. `yarn account new buyer` creates an Algorand account, saves its mnemonic to `.env.client` (gitignored, never read by the server) and prints the address.
 
 ```sh
-npm i @x402/fetch @x402/avm algosdk
+yarn install
+yarn account new buyer
 ```
 
+1. Send the address at least 0.201 ALGO from https://lora.algokit.io/testnet/fund. ALGO only covers the minimum balance and the opt-in fee; the facilitator pays the payment fee.
+2. Opt in to TestNet USDC (ASA `10458941`) with `yarn account optin buyer`. Without the opt-in, payments fail with `asset 10458941 missing from <address>`.
+3. Get test USDC for the address at https://faucet.circle.com (USDC, Algorand Testnet). `yarn account status buyer` prints the balance.
+4. Start a TestNet server on `localhost:3000` as described in [Run it yourself](#run-it-yourself).
+
+Save this as `pay.mjs` in the repository root and run `node pay.mjs`:
+
 ```js
-// pay.mjs: ALGORAND_MNEMONIC is a 25-word account holding USDC
 import { toClientAvmSigner } from '@x402/avm';
 import { ExactAvmScheme } from '@x402/avm/exact/client';
 import { wrapFetchWithPayment, x402Client } from '@x402/fetch';
 import algosdk from 'algosdk';
 
-const { sk } = algosdk.mnemonicToSecretKey(process.env.ALGORAND_MNEMONIC);
+process.loadEnvFile('.env.client');
+const { sk } = algosdk.mnemonicToSecretKey(process.env.ALGORAND_BUYER_MNEMONIC);
 const signer = toClientAvmSigner(Buffer.from(sk).toString('base64'));
-const client = new x402Client().register(
-  'algorand:*',
-  new ExactAvmScheme(signer)
-);
+const client = new x402Client()
+  .register('algorand:*', new ExactAvmScheme(signer))
+  .onAfterPaymentCreation(async ({ selectedRequirements: r }) =>
+    console.log(`402: signed ${r.amount} of asset ${r.asset} to ${r.payTo}`)
+  );
 const paidFetch = wrapFetchWithPayment(fetch, client);
-const res = await paidFetch('https://<host>/v1/spaces/ens.eth');
+
+const res = await paidFetch('http://localhost:3000/v1/spaces/ens.eth');
 console.log(res.status, await res.json());
+const settlement = res.headers.get('payment-response');
+if (settlement) {
+  const { transaction } = JSON.parse(atob(settlement));
+  console.log(`https://facilitator.goplausible.xyz/api/receipt/${transaction}`);
+}
 ```
 
-What happens on the wire:
+It prints the 402 it paid (`10000` of asset `10458941`, which is 0.01 USDC), then `200` with the space JSON, then the receipt link `https://facilitator.goplausible.xyz/api/receipt/<txId>`. In another project, `npm i @x402/fetch @x402/avm algosdk` installs the same client. The unpaid call's 402 carries the payment terms in a base64 `PAYMENT-REQUIRED` header; this prints them:
 
 ```sh
-$ curl -si https://<host>/v1/spaces/ens.eth | grep -i '^payment-required' | cut -d' ' -f2 | tr -d '\r' | base64 -d
+node -e "fetch('http://localhost:3000/v1/spaces/ens.eth').then(r => console.log(JSON.stringify(JSON.parse(atob(r.headers.get('payment-required'))).accepts[0], null, 2)))"
 ```
 
 ```json
 {
-  "x402Version": 2,
-  "accepts": [
-    {
-      "scheme": "exact",
-      "network": "algorand:SGO1GKSzyE7IEPItTxCByw9x8FmnrCDexi9/cOUJOiI=",
-      "amount": "10000",
-      "asset": "10458941",
-      "payTo": "M57WFAJXLE2RO2HL3LNAT5I2FGP2ZJ4DK6HDDAKFNPWKAATTJYFPRACHUE",
-      "maxTimeoutSeconds": 300,
-      "extra": {
-        "tag": "x402-global-challenge",
-        "feePayer": "ZMFK2OI7ZBD2U27ISERZC4S6LKM6WMFJPZQ4MYNJDZ2VNBNMBA67RA22AA"
-      }
-    }
-  ]
+  "scheme": "exact",
+  "network": "algorand:SGO1GKSzyE7IEPItTxCByw9x8FmnrCDexi9/cOUJOiI=",
+  "amount": "10000",
+  "asset": "10458941",
+  "payTo": "M57WFAJXLE2RO2HL3LNAT5I2FGP2ZJ4DK6HDDAKFNPWKAATTJYFPRACHUE",
+  "maxTimeoutSeconds": 300,
+  "extra": {
+    "tag": "x402-global-challenge",
+    "feePayer": "ZMFK2OI7ZBD2U27ISERZC4S6LKM6WMFJPZQ4MYNJDZ2VNBNMBA67RA22AA"
+  }
 }
 ```
 
-1. The unpaid call returns `402` with that base64 `PAYMENT-REQUIRED` header (plus `resource` and the Bazaar extensions). `amount` is micro-USDC and `extra.feePayer` is the facilitator account that pays the fee.
-2. The client signs a USDC transfer and retries with `PAYMENT-SIGNATURE`.
-3. The server verifies the payment, runs the request, and settles only if the response is below 400. The `200` carries a `PAYMENT-RESPONSE` header with the Algorand transaction id. Receipts: `https://facilitator.goplausible.xyz/api/receipt/<txId>`.
+`amount` is in micro-USDC, `extra.feePayer` is the facilitator account that pays the network fee, and `extra.tag` marks Challenge traffic. The client signs a USDC transfer and retries with a `PAYMENT-SIGNATURE` header. The server verifies it, runs the request and settles only if the response is below 400. The `200` carries a `PAYMENT-RESPONSE` header with the Algorand transaction id.
 
-Rules worth knowing:
-
-- Every unpaid request gets the 402 first, even with bad input. Input is validated after the payment is verified; a `400`, `404` or upstream error is not settled, so it is not charged.
+- Bad input, `404` and upstream errors are not settled, so they cost nothing. An unpaid call to a paid route gets the 402 first, even with bad input.
 - Each payment works once. Reusing a `PAYMENT-SIGNATURE` returns `402 payment_rejected` (`duplicate_payment`).
-- The one case where a buyer can pay without getting data is a `502 facilitator_error` after the settlement was submitted: the facilitator may still confirm it. The server logs the payment id and payer so it can be reconciled.
+- The one case where a buyer can pay without getting data is a `502 facilitator_error` after the settlement was sent (the facilitator has 45 seconds). The facilitator may still confirm it, and the server logs the payment id and payer so it can be reconciled.
 - More than 30 failed paid attempts per minute from one IP address return `429 rate_limited`.
 
-## Run it locally (TestNet)
+## Endpoints
 
-Requirements: Node 22.13 or newer, Yarn 1.
+| Route                                                | Price (USDC) | What you get                                                                                                                 |
+| ---------------------------------------------------- | ------------ | ---------------------------------------------------------------------------------------------------------------------------- |
+| `GET /v1/spaces/{id}`                                | 0.01         | Space profile: voting strategies, voting settings, admins, delegation portal and activity stats                              |
+| `GET /v1/spaces/{id}/proposals?state=&first=&skip=`  | 0.01         | Proposals, newest first, with state, choices, live scores, vote count and quorum. `state` is `active`, `pending` or `closed` |
+| `GET /v1/proposals/{id}?include=body`                | 0.01         | One proposal with per-choice results, leading choice, quorum, strategies and state. `include=body` adds the Markdown text    |
+| `GET /v1/proposals/{id}/votes?first=&skip=&orderBy=` | 0.01         | Votes: voter, choice, voting power (total and per strategy), reason and time. `orderBy` is `vp` (default) or `created`       |
+| `GET /v1/vp?voter=&space=&proposal=`                 | 0.02         | Voting power of `voter` per strategy, at the proposal's snapshot block or now for the space. Needs `space` or `proposal`     |
+| `GET /`, `/openapi.json`, `/llms.txt`, `/healthz`    | free         | Service description (HTML, or JSON with `Accept: application/json`), OpenAPI 3.1, plain-text summary, liveness               |
+
+Lists return `hasMore` and `next` (relative URL of the next page, or `null`), and votes also return `total`; `first` is 1 to 100 and `skip` at most 5000. Errors are always `{"error": {"code", "message"}}`.
+
+## Run it yourself
+
+The server needs a receiving account (`payTo`) that has opted in to USDC. On TestNet, create it like the buyer: `yarn account new payto`, fund it, then `yarn account optin payto`. Run `cp .env.example .env` (it already selects TestNet), set `X402_PAY_TO` in `.env` to the payto address (`yarn account status payto` prints it) and start the server:
 
 ```sh
-yarn install
-yarn account new payto       # receiving account, mnemonic saved to .env.client (gitignored)
-yarn account new buyer       # paying account
+yarn dev
 ```
 
-1. Fund both addresses with about 0.5 ALGO at https://lora.algokit.io/testnet/fund.
-2. Opt both in to TestNet USDC (ASA `10458941`): `yarn account optin payto` and `yarn account optin buyer`. An account that has not opted in cannot receive USDC, and the facilitator rejects the payment in simulation.
-3. Get TestNet USDC for the buyer at https://faucet.circle.com (USDC, Algorand Testnet). Check with `yarn account`.
-4. `cp .env.example .env`, set `X402_PAY_TO` to the payto address, then `yarn dev`.
-5. `yarn client` calls every paid route once, logs each 402, signature and settlement with its receipt link, and exits non-zero if any call did not settle.
+In a second terminal, `curl -i http://localhost:3000/v1/spaces/ens.eth` answers `HTTP/1.1 402 Payment Required` with the `PAYMENT-REQUIRED` header. The boot log warns if `X402_PAY_TO` has not opted in to USDC. `yarn client` pays every paid route once with the buyer in `.env.client` and prints each receipt link; set `X402_CLIENT_URL` and `X402_CLIENT_NETWORK` (in `.env.client` or the shell) to point it at another server or network.
 
-`yarn client` reads `.env.client` (`ALGORAND_BUYER_MNEMONIC`, optional `X402_CLIENT_URL` and `X402_CLIENT_NETWORK`); the server never loads it. The `TestNet payment` GitHub workflow runs the same round trip on demand with the `TESTNET_BUYER_MNEMONIC` secret and `TESTNET_PAY_TO` variable.
+## Deploy
 
-## Deploy to MainNet
+`fly.toml` and `render.yaml` set `X402_NETWORK` to Algorand MainNet and build the `Dockerfile` (Node 22 Alpine, non-root, health check on `/healthz`). Before the first MainNet payment:
 
-Before the first MainNet payment:
-
-1. Pick the public origin and point the domain at the host. The Bazaar lists the origin of the first settled payment and later payments do not change it, so the domain must be final first. With `PUBLIC_URL` set, `/v1` answers `421` on any other host and free pages redirect there.
-2. Give the MainNet `payTo` 0.2 ALGO and opt it in to USDC ASA `31566704`. The server checks this at boot and logs a warning if the opt-in is missing.
-3. Decide the price (see [Pricing](#pricing)).
-
-| Variable           | Value                                                            |
-| ------------------ | ---------------------------------------------------------------- |
-| `X402_NETWORK`     | `algorand:wGHE2Pwdvd7S12BL5FaOP20EGYesN73ktiC1qzkkit8=`          |
-| `X402_PAY_TO`      | MainNet receiving address, opted in to USDC ASA `31566704`       |
-| `PUBLIC_URL`       | The public https origin, for example `https://x402.snapshot.box` |
-| `SNAPSHOT_API_KEY` | Snapshot API key, sent to the hub and score-api as `x-api-key`   |
+1. Pick the MainNet `payTo` and keep it: the Bazaar listing, dashboard and leaderboard are keyed on it. Fund it with at least 0.201 ALGO and opt it in to USDC ASA `31566704`. The server logs a warning at boot if the opt-in is missing.
+2. Pick the final https origin and set it as `PUBLIC_URL`. The server refuses to start on MainNet without it, because the Bazaar lists the origin of the first settled payment and later payments do not change it. With it set, `/v1` answers `421` on any other host and free pages redirect to it.
 
 Fly.io:
 
 ```sh
-fly launch --no-deploy --copy-config
-fly secrets set X402_PAY_TO=... SNAPSHOT_API_KEY=... PUBLIC_URL=https://x402.snapshot.box
-fly certs add x402.snapshot.box
+fly launch --no-deploy --copy-config --name snapshot-x402 --region iad
+fly secrets set X402_PAY_TO=YOUR_MAINNET_ADDRESS PUBLIC_URL=https://snapshot-x402.fly.dev SNAPSHOT_API_KEY=YOUR_SNAPSHOT_KEY
 fly deploy
-curl -si https://x402.snapshot.box/v1/spaces/ens.eth | head -1   # HTTP/2 402
+curl -si https://snapshot-x402.fly.dev/v1/spaces/ens.eth | head -1
 ```
 
-Render: New, Blueprint, pick this repository (`render.yaml`), fill in `X402_PAY_TO`, `SNAPSHOT_API_KEY` and `PUBLIC_URL`, add the custom domain under Settings, then deploy.
+The last line prints `HTTP/2 402`. For a custom domain, run `fly certs add` with it and use it as `PUBLIC_URL` before the first payment. Then check one paid URL with the x402 Doctor at https://facilitator.goplausible.xyz/guide. The app trusts exactly one proxy hop (`trust proxy: 1`), which is what Fly and Render add; do not put a second proxy in front of it.
 
-Both run the `Dockerfile` (Node 22 Alpine pinned by digest, non-root) and health-check `/healthz`. The app trusts one proxy hop, so the 402 advertises `https://` URLs behind the platform's TLS proxy. Keep the MainNet `payTo` stable: the Bazaar listing, dashboard and leaderboard are keyed on it.
-
-## Pricing
-
-The defaults are 0.01 USDC per read and 0.02 USDC per voting-power call (`X402_PRICE_READ`, `X402_PRICE_VP`). GoPlausible settles MainNet payments of $0.01 or more for free without limit. Payments under $0.01 are free only for the first 1,000 settlements per `payTo`, per chain, per month; after that `/settle` answers `429 subcent_quota_exceeded` until the month ends or Settlement Units are bought ($10 for 25,000 on Algorand). If you lower a price below $0.01 the server logs a warning at boot on MainNet. See https://facilitator.goplausible.xyz/guide/policy.
+Render: New, Blueprint, pick this repository (`render.yaml`), fill in `X402_PAY_TO`, `PUBLIC_URL` and `SNAPSHOT_API_KEY`, then deploy.
+The starter plan in `render.yaml` keeps the instance running, so the first 402 is not delayed by a cold start.
 
 ## Configuration
 
-| Variable               | Default                               | Notes                                                                        |
-| ---------------------- | ------------------------------------- | ---------------------------------------------------------------------------- |
-| `PORT`                 | `3000`                                |                                                                              |
-| `PUBLIC_URL`           | request origin                        | Required on MainNet. Canonical host for 402s, discovery files and redirects  |
-| `SNAPSHOT_API_KEY`     | none                                  | Without it the hub limits this server to 100 requests per minute per IP      |
-| `HUB_URL`              | `https://hub.snapshot.org/graphql`    |                                                                              |
-| `SCORE_API_URL`        | `https://score.snapshot.org`          |                                                                              |
-| `X402_NETWORK`         | Algorand MainNet                      | Full genesis-hash id, as listed by the facilitator's `/supported`            |
-| `X402_PAY_TO`          | required                              | Algorand address, checked at startup                                         |
-| `X402_FACILITATOR_URL` | `https://facilitator.goplausible.xyz` |                                                                              |
-| `X402_PRICE_READ`      | `0.01`                                | USDC per call on the four read routes, at most 6 decimals                    |
-| `X402_PRICE_VP`        | `0.02`                                | USDC per call on `/v1/vp`                                                    |
-| `X402_TAG`             | `x402-global-challenge`               | Sent as `accepts[].extra.tag` and as a resource tag; `none` turns it off     |
-| `X402_PAY_TO_EVM`      | none                                  | Adds Base USDC as a second option (Base mainnet, or Base Sepolia on TestNet) |
-| `ALGOD_URL`            | AlgoNode for the network              | Used only for the boot check of the `payTo` USDC opt-in                      |
+| Variable               | Default                                                           | Notes                                                                                                                        |
+| ---------------------- | ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `PORT`                 | `3000`                                                            | `8080` in the `Dockerfile` and `fly.toml`                                                                                    |
+| `PUBLIC_URL`           | none                                                              | Required on MainNet. Canonical origin for paid routes, free pages and docs links                                             |
+| `SNAPSHOT_API_KEY`     | none                                                              | Sent to the hub and score-api as `x-api-key`. Without it upstream calls are rate limited per IP                              |
+| `HUB_URL`              | `https://hub.snapshot.org/graphql`                                |                                                                                                                              |
+| `SCORE_API_URL`        | `https://score.snapshot.org`                                      |                                                                                                                              |
+| `X402_NETWORK`         | `algorand:wGHE2Pwdvd7S12BL5FaOP20EGYesN73ktiC1qzkkit8=` (MainNet) | TestNet is `algorand:SGO1GKSzyE7IEPItTxCByw9x8FmnrCDexi9/cOUJOiI=`. USDC is ASA `31566704` on MainNet, `10458941` on TestNet |
+| `ALGOD_URL`            | `https://mainnet-api.algonode.cloud`                              | `https://testnet-api.algonode.cloud` on TestNet. Only used to check the `payTo` USDC opt-in at boot                          |
+| `X402_PAY_TO`          | required                                                          | Algorand address that receives USDC                                                                                          |
+| `X402_FACILITATOR_URL` | `https://facilitator.goplausible.xyz`                             |                                                                                                                              |
+| `X402_PRICE_READ`      | `0.01`                                                            | USDC per call on the four read routes, at most 6 decimals                                                                    |
+| `X402_PRICE_VP`        | `0.02`                                                            | USDC per call on `/v1/vp`                                                                                                    |
+| `X402_TAG`             | `x402-global-challenge`                                           | Sent as `accepts[].extra.tag` and as a resource tag. `none` turns it off                                                     |
+| `X402_PAY_TO_EVM`      | none                                                              | Adds Base USDC as a second option (Base mainnet, or Base Sepolia on TestNet)                                                 |
 
-## Discovery
+Both default prices are 0.01 USDC or more, which GoPlausible settles with no quota. Prices under 0.01 USDC get 1,000 free settlements per `payTo` per chain per UTC month; after that the facilitator answers `429 subcent_quota_exceeded` until the month ends or Settlement Units are bought ($10 = 25,000 on Algorand). The server logs a warning at boot on MainNet when a price is under 0.01. See https://facilitator.goplausible.xyz/guide/policy.
 
-- Each paid route declares the Bazaar extension (input, path parameters, output example) and an `x402-merchant` extension. The first settled payment lists the route in https://facilitator.goplausible.xyz/discovery/resources.
-- The facilitator enriches the listing from the API origin: `/` serves HTML with OpenGraph and Twitter tags and a 1200x630 banner at `/og.png`, plus `/llms.txt`.
-- Browsers that open a paid URL get a short 402 page that links to the docs.
-- Registering an NFD on the MainNet `payTo` gives the listing a verified name and avatar across the facilitator.
+## Challenge checklist
 
-## Algorand x402 Global Challenge checklist
+| Requirement                                  | Where it is met                                                                                                                                                                                                                                                                                                  |
+| -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Built and tested on TestNet, pays end to end | [Pay for a call in 5 minutes](#pay-for-a-call-in-5-minutes), `yarn client`, and the `TestNet payment` workflow (`.github/workflows/e2e.yml`)                                                                                                                                                                     |
+| GoPlausible facilitator                      | `X402_FACILITATOR_URL` default                                                                                                                                                                                                                                                                                   |
+| Live on MainNet with a stable `payTo`        | `fly.toml` and `render.yaml` use the MainNet id, `PUBLIC_URL` is required, one `X402_PAY_TO` for all five paid routes                                                                                                                                                                                            |
+| Routes tagged `x402-global-challenge`        | `accepts[].extra.tag` on every paid route (`X402_TAG`), shown under SOURCE → X402-GLOBAL-CHALLENGE on https://facilitator.goplausible.xyz/dashboard                                                                                                                                                              |
+| Listed in the Bazaar with real settles       | Bazaar and `x402-merchant` extensions on every paid route (`src/x402-routes.ts`), listed at https://facilitator.goplausible.xyz/discovery/resources after the first settled MainNet payment                                                                                                                      |
+| First MainNet payment                        | `X402_CLIENT_URL=https://snapshot-x402.fly.dev X402_CLIENT_NETWORK=algorand:wGHE2Pwdvd7S12BL5FaOP20EGYesN73ktiC1qzkkit8= yarn client` with a MainNet buyer holding USDC in `.env.client` (0.06 USDC for five calls). Self-funded payments count as synthetic traffic; volume should come from independent buyers |
+| Shareable receipt for every settle           | `https://facilitator.goplausible.xyz/api/receipt/<txId>`, printed by `pay.mjs` and `yarn client`                                                                                                                                                                                                                 |
 
-| Requirement                                    | Where                                                                                                     |
-| ---------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| Build and test on TestNet                      | TestNet steps above, `yarn client`, `TestNet payment` workflow                                            |
-| MainNet on public HTTPS                        | `Dockerfile`, `fly.toml`, `render.yaml`, `X402_NETWORK` MainNet id, `PUBLIC_URL`                          |
-| GoPlausible facilitator                        | `X402_FACILITATOR_URL` default                                                                            |
-| Bazaar discovery                               | `declareDiscoveryExtension` on every route (`src/catalog.ts`, `src/x402-routes.ts`)                       |
-| `extra: { tag: 'x402-global-challenge' }`      | `accepts[].extra.tag` on every route (`X402_TAG`)                                                         |
-| At least one real MainNet payment              | `X402_CLIENT_URL=https://<host> X402_CLIENT_NETWORK=<MainNet id> yarn client` with a funded MainNet buyer |
-| Bazaar and leaderboard presence                | https://facilitator.goplausible.xyz/discovery/resources and `/dashboard/leaderboards`                     |
-| Composite entry (several endpoints, one payTo) | Five paid routes, one `X402_PAY_TO`                                                                       |
-
-Payments from wallets the merchant owns or funded count as synthetic traffic. Short tests are fine; volume should come from independent buyers.
-
-Electric Capital: once the repository is public, open a pull request on https://github.com/electric-capital/open-dev-data that adds a migration file `migrations/<YYYY-MM-DDThhmmss>_add_snapshot_x402` containing `repadd Algorand https://github.com/<owner>/snapshot-x402` (confirm the ecosystem name with `uvx open-dev-data export -e Algorand algorand.jsonl`), then run `uvx open-dev-data validate`.
+Electric Capital: once this repository is public, open a pull request on https://github.com/electric-capital/open-dev-data that adds the file `migrations/<YYYY-MM-DDThhmmss>_add_snapshot_x402` (UTC time of creation, for example `migrations/2026-10-01T090000_add_snapshot_x402`) containing the line `repadd Algorand https://github.com/ChaituVR/snapshot-x402`, then run `uvx open-dev-data validate` in that repository.
 
 ## Development
 
 ```sh
-yarn lint        # ESLint + Prettier (@snapshot-labs configs)
+yarn lint
 yarn typecheck
-yarn test        # Jest + supertest: facilitator and upstreams mocked, responses checked against openapi.json
+yarn test
 yarn build && yarn start
 ```
-
-Code map: `src/x402.ts` payment middleware, facilitator hooks and error shapes; `src/x402-routes.ts` route prices, Bazaar and paywall config; `src/payments.ts` one-use payment ledger; `src/middleware.ts` request id, method guard, canonical host and failed-payment rate limit; `src/catalog.ts` paid routes and Bazaar metadata; `src/snapshot.ts` hub and score-api clients; `src/routes/` handlers; `src/discovery.ts` free documents; `src/config.ts` environment.
 
 ## License
 
