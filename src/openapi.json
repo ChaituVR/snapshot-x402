@@ -1,0 +1,1952 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Snapshot x402 API",
+    "version": "1.0.0",
+    "summary": "Pay-per-request Snapshot governance data for agents, paid in USDC on Algorand via x402.",
+    "description": "Read-only REST API over Snapshot (https://snapshot.box) governance data: spaces, proposals, results, votes and voting power. No API key and no account: every paid route is priced per request and paid with the x402 protocol (v2).\n\n## How to pay\n1. Call a paid route without payment. You get HTTP 402 and a `PAYMENT-REQUIRED` header: base64 JSON with `x402Version: 2`, the `resource`, and `accepts[]` (scheme `exact`, network, asset, amount in atomic units, payTo, maxTimeoutSeconds, extra).\n2. Sign a payment for one of the `accepts` entries with an x402 client (for example `@x402/fetch` with `@x402/avm`) and retry the same request with the base64 payload in the `PAYMENT-SIGNATURE` header.\n3. On success you get HTTP 200, the data, and a `PAYMENT-RESPONSE` header (base64 JSON settlement receipt with the transaction id).\n\nPayments are USDC on Algorand (mainnet ASA 31566704, 6 decimals), settled by the GoPlausible facilitator (https://facilitator.goplausible.xyz), which pays the network fee. You only need USDC. Settlement happens after the handler succeeds: requests that end in 4xx/5xx are not settled, so they are not charged. The one exception is a 502 `facilitator_error` after the settlement was submitted: the facilitator may still confirm it. Each payment works once; sign a new one for every request. Every unpaid request gets the 402 first (x402 clients and the facilitator probe routes without paying). Input is validated after the payment is verified: a malformed request returns 400 and is not charged.\n\n## Pricing (defaults)\n| Route | Price (USDC) |\n|---|---|\n| GET /v1/spaces/{id} | 0.01 |\n| GET /v1/spaces/{id}/proposals | 0.01 |\n| GET /v1/proposals/{id} | 0.01 |\n| GET /v1/proposals/{id}/votes | 0.01 |\n| GET /v1/vp | 0.02 |\n\nFree: GET /, GET /openapi.json, GET /llms.txt, GET /healthz.\n\nErrors are JSON `{\"error\": {\"code\", \"message\"}}`. Lists return `hasMore` and `next` (relative URL of the next page, or null).\n\nTimestamps are unix seconds (UTC). Scores and voting power are decimal token amounts, not atomic units.",
+    "license": {
+      "name": "MIT",
+      "identifier": "MIT"
+    }
+  },
+  "servers": [
+    {
+      "url": "/",
+      "description": "This deployment"
+    }
+  ],
+  "externalDocs": {
+    "description": "x402 protocol",
+    "url": "https://x402.org"
+  },
+  "tags": [
+    {
+      "name": "Governance data",
+      "description": "Paid routes (x402)."
+    },
+    {
+      "name": "Service",
+      "description": "Free routes."
+    }
+  ],
+  "paths": {
+    "/": {
+      "get": {
+        "operationId": "getIndex",
+        "summary": "What this is and how to pay",
+        "tags": ["Service"],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Service description, routes, prices and payment details.",
+            "headers": {
+              "Cache-Control": {
+                "description": "public, max-age=300",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceInfo"
+                }
+              },
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "description": "HTML for browsers and link previews by default; JSON when the request prefers application/json."
+      }
+    },
+    "/openapi.json": {
+      "get": {
+        "operationId": "getOpenApi",
+        "summary": "This OpenAPI document",
+        "tags": ["Service"],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "OpenAPI 3.1 document.",
+            "headers": {
+              "Cache-Control": {
+                "description": "public, max-age=300",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/llms.txt": {
+      "get": {
+        "operationId": "getLlmsTxt",
+        "summary": "Agent docs (llms.txt)",
+        "tags": ["Service"],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Plain text summary of the routes, prices and payment flow for LLM agents.",
+            "headers": {
+              "Cache-Control": {
+                "description": "public, max-age=300",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/healthz": {
+      "get": {
+        "operationId": "getHealth",
+        "summary": "Liveness",
+        "tags": ["Service"],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Process is up.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControlNoStore"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["status"],
+                  "properties": {
+                    "status": {
+                      "const": "ok"
+                    }
+                  }
+                },
+                "example": {
+                  "status": "ok"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/spaces/{id}": {
+      "get": {
+        "operationId": "getSpace",
+        "summary": "Space profile, settings and activity stats",
+        "description": "One Snapshot space: identity, voting strategies (names and symbols), voting settings, admins, treasuries, delegation portal and activity counters.\n\nDefault price: 0.01 USDC per successful request (x402 exact scheme). Failed requests (4xx/5xx) are not settled.",
+        "tags": ["Governance data"],
+        "security": [
+          {
+            "x402": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Snapshot space id (ENS-style name, case-insensitive, max 64 chars), e.g. ens.eth, aavedao.eth.",
+            "schema": {
+              "$ref": "#/components/schemas/SpaceId"
+            },
+            "example": "ens.eth"
+          }
+        ],
+        "x-x402": {
+          "price": "0.01",
+          "currency": "USDC",
+          "scheme": "exact",
+          "network": "algorand:wGHE2Pwdvd7S12BL5FaOP20EGYesN73ktiC1qzkkit8="
+        },
+        "responses": {
+          "200": {
+            "description": "Paid response. The PAYMENT-RESPONSE header carries the settlement receipt.",
+            "headers": {
+              "PAYMENT-RESPONSE": {
+                "$ref": "#/components/headers/PaymentResponse"
+              },
+              "Cache-Control": {
+                "description": "private, max-age=300",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Space"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "402": {
+            "$ref": "#/components/responses/PaymentRequired"
+          },
+          "404": {
+            "description": "Space not found",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControlNoStore"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": {
+                    "code": "not_found",
+                    "message": "Space not found"
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "421": {
+            "$ref": "#/components/responses/Misdirected"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "504": {
+            "$ref": "#/components/responses/UpstreamTimeout"
+          }
+        }
+      }
+    },
+    "/v1/spaces/{id}/proposals": {
+      "get": {
+        "operationId": "listSpaceProposals",
+        "summary": "Proposals of a space, newest first",
+        "description": "Proposals of one space ordered by creation time (newest first), with live or final scores. Body text is not included; use GET /v1/proposals/{id}?include=body.\n\nDefault price: 0.01 USDC per successful request (x402 exact scheme). Failed requests (4xx/5xx) are not settled.",
+        "tags": ["Governance data"],
+        "security": [
+          {
+            "x402": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Snapshot space id (ENS-style name, case-insensitive, max 64 chars), e.g. ens.eth, aavedao.eth.",
+            "schema": {
+              "$ref": "#/components/schemas/SpaceId"
+            },
+            "example": "ens.eth"
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "required": false,
+            "description": "Filter by state. Omit for all states.",
+            "schema": {
+              "type": "string",
+              "enum": ["active", "pending", "closed"]
+            }
+          },
+          {
+            "name": "first",
+            "in": "query",
+            "required": false,
+            "description": "Page size.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          },
+          {
+            "name": "skip",
+            "in": "query",
+            "required": false,
+            "description": "Offset for pagination.",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 5000,
+              "default": 0
+            }
+          }
+        ],
+        "x-x402": {
+          "price": "0.01",
+          "currency": "USDC",
+          "scheme": "exact",
+          "network": "algorand:wGHE2Pwdvd7S12BL5FaOP20EGYesN73ktiC1qzkkit8="
+        },
+        "responses": {
+          "200": {
+            "description": "Paid response. The PAYMENT-RESPONSE header carries the settlement receipt.",
+            "headers": {
+              "PAYMENT-RESPONSE": {
+                "$ref": "#/components/headers/PaymentResponse"
+              },
+              "Cache-Control": {
+                "description": "private, max-age=60 (30 when state=active)",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProposalList"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "402": {
+            "$ref": "#/components/responses/PaymentRequired"
+          },
+          "404": {
+            "description": "Space not found",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControlNoStore"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": {
+                    "code": "not_found",
+                    "message": "Space not found"
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "421": {
+            "$ref": "#/components/responses/Misdirected"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "504": {
+            "$ref": "#/components/responses/UpstreamTimeout"
+          }
+        }
+      }
+    },
+    "/v1/proposals/{id}": {
+      "get": {
+        "operationId": "getProposal",
+        "summary": "Proposal with results",
+        "description": "One proposal with per-choice results (score, share of total, score per strategy), quorum, strategies and state. Add include=body for the Markdown body.\n\nDefault price: 0.01 USDC per successful request (x402 exact scheme). Failed requests (4xx/5xx) are not settled.",
+        "tags": ["Governance data"],
+        "security": [
+          {
+            "x402": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Snapshot proposal id: 0x + 64 hex (current), or a legacy IPFS CID (Qm... or baf...).",
+            "schema": {
+              "$ref": "#/components/schemas/ProposalId"
+            },
+            "example": "0xcd8d33f6531ed3baa3f728ca8509c66ce7505877b349e6127981e8254adf9a22"
+          },
+          {
+            "name": "include",
+            "in": "query",
+            "required": false,
+            "description": "Set to body to include the proposal body (Markdown).",
+            "schema": {
+              "type": "string",
+              "enum": ["body"]
+            }
+          }
+        ],
+        "x-x402": {
+          "price": "0.01",
+          "currency": "USDC",
+          "scheme": "exact",
+          "network": "algorand:wGHE2Pwdvd7S12BL5FaOP20EGYesN73ktiC1qzkkit8="
+        },
+        "responses": {
+          "200": {
+            "description": "Paid response. The PAYMENT-RESPONSE header carries the settlement receipt.",
+            "headers": {
+              "PAYMENT-RESPONSE": {
+                "$ref": "#/components/headers/PaymentResponse"
+              },
+              "Cache-Control": {
+                "description": "private, max-age=3600 when closed and scores final; 30 when active; 60 otherwise",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Proposal"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "402": {
+            "$ref": "#/components/responses/PaymentRequired"
+          },
+          "404": {
+            "description": "Proposal not found",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControlNoStore"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": {
+                    "code": "not_found",
+                    "message": "Proposal not found"
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "421": {
+            "$ref": "#/components/responses/Misdirected"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "504": {
+            "$ref": "#/components/responses/UpstreamTimeout"
+          }
+        }
+      }
+    },
+    "/v1/proposals/{id}/votes": {
+      "get": {
+        "operationId": "listProposalVotes",
+        "summary": "Votes on a proposal",
+        "description": "Votes on one proposal, ordered by voting power (default) or time, with the proposal choices so choice indexes can be mapped to labels. Choice format depends on the proposal type: single-choice and basic use a 1-based index; approval, ranked-choice and copeland use an array of 1-based indexes; weighted and quadratic use an object of index to weight. For shutter-private proposals the choice is an encrypted hex string until the proposal closes.\n\nDefault price: 0.01 USDC per successful request (x402 exact scheme). Failed requests (4xx/5xx) are not settled.",
+        "tags": ["Governance data"],
+        "security": [
+          {
+            "x402": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Snapshot proposal id: 0x + 64 hex (current), or a legacy IPFS CID (Qm... or baf...).",
+            "schema": {
+              "$ref": "#/components/schemas/ProposalId"
+            },
+            "example": "0xcd8d33f6531ed3baa3f728ca8509c66ce7505877b349e6127981e8254adf9a22"
+          },
+          {
+            "name": "first",
+            "in": "query",
+            "required": false,
+            "description": "Page size.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 100
+            }
+          },
+          {
+            "name": "skip",
+            "in": "query",
+            "required": false,
+            "description": "Offset for pagination.",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 5000,
+              "default": 0
+            }
+          },
+          {
+            "name": "orderBy",
+            "in": "query",
+            "required": false,
+            "description": "Sort key, always descending.",
+            "schema": {
+              "type": "string",
+              "enum": ["vp", "created"],
+              "default": "vp"
+            }
+          }
+        ],
+        "x-x402": {
+          "price": "0.01",
+          "currency": "USDC",
+          "scheme": "exact",
+          "network": "algorand:wGHE2Pwdvd7S12BL5FaOP20EGYesN73ktiC1qzkkit8="
+        },
+        "responses": {
+          "200": {
+            "description": "Paid response. The PAYMENT-RESPONSE header carries the settlement receipt.",
+            "headers": {
+              "PAYMENT-RESPONSE": {
+                "$ref": "#/components/headers/PaymentResponse"
+              },
+              "Cache-Control": {
+                "description": "private, max-age=3600 when proposal closed and scores final; 30 otherwise",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoteList"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "402": {
+            "$ref": "#/components/responses/PaymentRequired"
+          },
+          "404": {
+            "description": "Proposal not found",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControlNoStore"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": {
+                    "code": "not_found",
+                    "message": "Proposal not found"
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "421": {
+            "$ref": "#/components/responses/Misdirected"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "504": {
+            "$ref": "#/components/responses/UpstreamTimeout"
+          }
+        }
+      }
+    },
+    "/v1/vp": {
+      "get": {
+        "operationId": "getVotingPower",
+        "summary": "Voting power of an address",
+        "description": "Voting power of one address, broken down by strategy. With proposal: computed at the proposal snapshot block using the proposal strategies (final once the block is past). With space only: computed at the latest block using the current space strategies. At least one of space or proposal is required; if both are given the proposal must belong to the space.\n\nDefault price: 0.02 USDC per successful request (x402 exact scheme). Failed requests (4xx/5xx) are not settled.",
+        "tags": ["Governance data"],
+        "security": [
+          {
+            "x402": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "voter",
+            "in": "query",
+            "required": true,
+            "description": "EVM address (0x + 40 hex) or Starknet address (0x + 64 hex). Case-insensitive.",
+            "schema": {
+              "$ref": "#/components/schemas/Address"
+            },
+            "example": "0x3320756d61303284b8012a660ee185c58edd3bb7"
+          },
+          {
+            "name": "space",
+            "in": "query",
+            "required": false,
+            "description": "Space id. Required when proposal is omitted.",
+            "schema": {
+              "$ref": "#/components/schemas/SpaceId"
+            },
+            "example": "aavedao.eth"
+          },
+          {
+            "name": "proposal",
+            "in": "query",
+            "required": false,
+            "description": "Proposal id. Required when space is omitted.",
+            "schema": {
+              "$ref": "#/components/schemas/ProposalId"
+            },
+            "example": "0xcd8d33f6531ed3baa3f728ca8509c66ce7505877b349e6127981e8254adf9a22"
+          }
+        ],
+        "x-x402": {
+          "price": "0.02",
+          "currency": "USDC",
+          "scheme": "exact",
+          "network": "algorand:wGHE2Pwdvd7S12BL5FaOP20EGYesN73ktiC1qzkkit8="
+        },
+        "responses": {
+          "200": {
+            "description": "Paid response. The PAYMENT-RESPONSE header carries the settlement receipt.",
+            "headers": {
+              "PAYMENT-RESPONSE": {
+                "$ref": "#/components/headers/PaymentResponse"
+              },
+              "Cache-Control": {
+                "description": "private, max-age=86400 when vpState is final; 60 otherwise",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VotingPower"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "402": {
+            "$ref": "#/components/responses/PaymentRequired"
+          },
+          "404": {
+            "description": "Space or proposal not found",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControlNoStore"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": {
+                    "code": "not_found",
+                    "message": "Space or proposal not found"
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "421": {
+            "$ref": "#/components/responses/Misdirected"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "504": {
+            "$ref": "#/components/responses/UpstreamTimeout"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "x402": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "PAYMENT-SIGNATURE",
+        "description": "x402 v2 payment: base64-encoded JSON PaymentPayload built from one entry of the PAYMENT-REQUIRED header returned by a 402. See https://x402.org."
+      }
+    },
+    "headers": {
+      "PaymentRequired": {
+        "description": "Base64 JSON PaymentRequired (x402 v2).",
+        "schema": {
+          "type": "string",
+          "contentEncoding": "base64",
+          "contentMediaType": "application/json",
+          "contentSchema": {
+            "$ref": "#/components/schemas/PaymentRequired"
+          }
+        }
+      },
+      "PaymentResponse": {
+        "description": "Base64 JSON SettleResponse (x402 v2).",
+        "schema": {
+          "type": "string",
+          "contentEncoding": "base64",
+          "contentMediaType": "application/json",
+          "contentSchema": {
+            "$ref": "#/components/schemas/SettleResponse"
+          }
+        }
+      },
+      "CacheControlNoStore": {
+        "description": "no-store",
+        "schema": {
+          "type": "string"
+        }
+      }
+    },
+    "responses": {
+      "BadGateway": {
+        "description": "Snapshot upstream failed (upstream_error), or the payment facilitator failed or timed out (facilitator_error). Not charged, except that a facilitator timeout during settlement can still be confirmed on chain.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControlNoStore"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "BadRequest": {
+        "description": "Invalid input. Checked after the payment is verified; the payment is not settled, so it is not charged.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControlNoStore"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": {
+                "code": "bad_request",
+                "message": "first must be an integer from 1 to 100"
+              }
+            }
+          }
+        }
+      },
+      "MethodNotAllowed": {
+        "description": "Only GET is allowed on paid routes (method_not_allowed). Not charged.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControlNoStore"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Misdirected": {
+        "description": "The request used a host other than the public URL of this deployment (misdirected_request); the message names the URL to use. Not charged.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControlNoStore"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "PaymentRequired": {
+        "description": "Payment required. Decode the PAYMENT-REQUIRED header, pay one of accepts[], retry with PAYMENT-SIGNATURE. Also returned when a payment is rejected (error.code payment_rejected, for example duplicate_payment or insufficient funds; the reason is also in the PAYMENT-REQUIRED header error field) or not settled (settlement_failed; the data is withheld).",
+        "headers": {
+          "PAYMENT-REQUIRED": {
+            "$ref": "#/components/headers/PaymentRequired"
+          },
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControlNoStore"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": {
+                "code": "payment_required",
+                "message": "This route costs 0.01 USDC per call, paid with x402. Any x402 client (for example @x402/fetch with @x402/avm) pays it for you."
+              },
+              "docs": "/"
+            }
+          }
+        }
+      },
+      "RateLimited": {
+        "description": "Too many failed paid attempts from this client in the last minute (rate_limited). Not charged.",
+        "headers": {
+          "Retry-After": {
+            "schema": {
+              "type": "integer"
+            }
+          },
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControlNoStore"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Unavailable": {
+        "description": "Snapshot upstream is rate limiting (upstream_rate_limited) or the payment facilitator is unreachable (facilitator_unavailable). Not charged. Retry after the Retry-After seconds.",
+        "headers": {
+          "Retry-After": {
+            "schema": {
+              "type": "integer"
+            }
+          },
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControlNoStore"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "UpstreamTimeout": {
+        "description": "Snapshot upstream timed out (upstream_timeout). Not charged.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControlNoStore"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": {
+                "code": "upstream_timeout",
+                "message": "Snapshot hub did not answer in time"
+              }
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "SpaceId": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64,
+        "pattern": "^[^\\s/?#%\\\\]+\\.[^\\s/?#%\\\\]+$",
+        "examples": ["ens.eth", "aavedao.eth"]
+      },
+      "ProposalId": {
+        "type": "string",
+        "pattern": "^(0x[0-9a-fA-F]{64}|Qm[1-9A-HJ-NP-Za-km-z]{44}|baf[a-z2-7]{56})$"
+      },
+      "Address": {
+        "type": "string",
+        "pattern": "^0x([0-9a-fA-F]{40}|[0-9a-fA-F]{64})$"
+      },
+      "Error": {
+        "type": "object",
+        "required": ["error"],
+        "properties": {
+          "error": {
+            "type": "object",
+            "required": ["code", "message"],
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "bad_request",
+                  "not_found",
+                  "payment_required",
+                  "payment_rejected",
+                  "settlement_failed",
+                  "upstream_error",
+                  "upstream_rate_limited",
+                  "upstream_timeout",
+                  "facilitator_error",
+                  "facilitator_unavailable",
+                  "method_not_allowed",
+                  "misdirected_request",
+                  "rate_limited",
+                  "internal_error"
+                ]
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          },
+          "docs": {
+            "type": "string",
+            "description": "Where to read how to pay (402 only)."
+          }
+        }
+      },
+      "StrategyRef": {
+        "type": "object",
+        "required": ["name"],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "network": {
+            "type": ["string", "null"]
+          },
+          "symbol": {
+            "type": ["string", "null"]
+          }
+        }
+      },
+      "Space": {
+        "type": "object",
+        "required": ["id", "name", "network", "strategies", "stats", "link"],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": ["string", "null"]
+          },
+          "about": {
+            "type": ["string", "null"]
+          },
+          "network": {
+            "type": "string",
+            "description": "Default chain id."
+          },
+          "symbol": {
+            "type": ["string", "null"]
+          },
+          "avatar": {
+            "type": ["string", "null"]
+          },
+          "website": {
+            "type": ["string", "null"]
+          },
+          "twitter": {
+            "type": ["string", "null"]
+          },
+          "github": {
+            "type": ["string", "null"]
+          },
+          "coingecko": {
+            "type": ["string", "null"]
+          },
+          "verified": {
+            "type": "boolean"
+          },
+          "flagged": {
+            "type": "boolean"
+          },
+          "hibernated": {
+            "type": "boolean"
+          },
+          "turbo": {
+            "type": "boolean"
+          },
+          "admins": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "moderators": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "membersCount": {
+            "type": "integer"
+          },
+          "strategies": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StrategyRef"
+            }
+          },
+          "proposalValidation": {
+            "type": ["string", "null"]
+          },
+          "voteValidation": {
+            "type": ["string", "null"]
+          },
+          "voting": {
+            "type": "object",
+            "properties": {
+              "delay": {
+                "type": ["integer", "null"]
+              },
+              "period": {
+                "type": ["integer", "null"]
+              },
+              "type": {
+                "type": ["string", "null"]
+              },
+              "quorum": {
+                "type": ["number", "null"]
+              },
+              "quorumType": {
+                "type": ["string", "null"]
+              },
+              "blind": {
+                "type": ["boolean", "null"]
+              },
+              "privacy": {
+                "type": ["string", "null"]
+              }
+            }
+          },
+          "stats": {
+            "type": "object",
+            "properties": {
+              "activeProposals": {
+                "type": ["integer", "null"]
+              },
+              "proposals": {
+                "type": ["integer", "null"]
+              },
+              "proposals30d": {
+                "type": ["integer", "null"]
+              },
+              "followers": {
+                "type": ["integer", "null"]
+              },
+              "votes": {
+                "type": ["integer", "null"]
+              },
+              "votes7d": {
+                "type": ["integer", "null"]
+              }
+            }
+          },
+          "treasuries": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": ["string", "null"]
+                },
+                "address": {
+                  "type": ["string", "null"]
+                },
+                "network": {
+                  "type": ["string", "null"]
+                }
+              }
+            }
+          },
+          "delegationPortal": {
+            "type": ["object", "null"],
+            "properties": {
+              "delegationType": {
+                "type": "string"
+              },
+              "delegationContract": {
+                "type": "string"
+              },
+              "delegationNetwork": {
+                "type": "string"
+              }
+            }
+          },
+          "parent": {
+            "type": ["string", "null"]
+          },
+          "children": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "created": {
+            "type": "integer"
+          },
+          "link": {
+            "type": "string",
+            "format": "uri"
+          }
+        }
+      },
+      "ProposalSummary": {
+        "type": "object",
+        "required": ["id", "title", "state", "choices", "scores", "link"],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "author": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string",
+            "enum": ["pending", "active", "closed"]
+          },
+          "type": {
+            "type": ["string", "null"],
+            "description": "single-choice, basic, approval, ranked-choice, weighted, quadratic, copeland"
+          },
+          "privacy": {
+            "type": ["string", "null"],
+            "description": "shutter when votes are encrypted until close"
+          },
+          "created": {
+            "type": "integer"
+          },
+          "start": {
+            "type": "integer"
+          },
+          "end": {
+            "type": "integer"
+          },
+          "snapshot": {
+            "type": ["integer", "null"],
+            "description": "Block number used for voting power."
+          },
+          "choices": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "scores": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          },
+          "scoresTotal": {
+            "type": ["number", "null"]
+          },
+          "scoresState": {
+            "type": ["string", "null"],
+            "enum": ["pending", "final", "invalid", "", null]
+          },
+          "votes": {
+            "type": ["integer", "null"]
+          },
+          "quorum": {
+            "type": ["number", "null"]
+          },
+          "quorumType": {
+            "type": ["string", "null"]
+          },
+          "flagged": {
+            "type": "boolean"
+          },
+          "link": {
+            "type": "string",
+            "format": "uri"
+          }
+        }
+      },
+      "ProposalList": {
+        "type": "object",
+        "required": [
+          "space",
+          "state",
+          "first",
+          "skip",
+          "hasMore",
+          "next",
+          "items"
+        ],
+        "properties": {
+          "space": {
+            "type": "string"
+          },
+          "state": {
+            "type": ["string", "null"]
+          },
+          "first": {
+            "type": "integer"
+          },
+          "skip": {
+            "type": "integer"
+          },
+          "hasMore": {
+            "type": "boolean",
+            "description": "True when another page may exist."
+          },
+          "next": {
+            "type": ["string", "null"],
+            "description": "Relative URL of the next page, or null (last page, or past skip 5000)."
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProposalSummary"
+            }
+          }
+        }
+      },
+      "ChoiceResult": {
+        "type": "object",
+        "required": ["choice", "label", "score", "share"],
+        "properties": {
+          "choice": {
+            "type": "integer",
+            "description": "1-based index, same as vote choice values."
+          },
+          "label": {
+            "type": "string"
+          },
+          "score": {
+            "type": "number"
+          },
+          "share": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "scoreByStrategy": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          }
+        }
+      },
+      "Proposal": {
+        "type": "object",
+        "required": [
+          "id",
+          "space",
+          "title",
+          "state",
+          "choices",
+          "results",
+          "link"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "ipfs": {
+            "type": ["string", "null"]
+          },
+          "space": {
+            "type": ["string", "null"],
+            "description": "Space id."
+          },
+          "spaceName": {
+            "type": ["string", "null"]
+          },
+          "spaceVerified": {
+            "type": "boolean"
+          },
+          "title": {
+            "type": "string"
+          },
+          "author": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string",
+            "enum": ["pending", "active", "closed"]
+          },
+          "type": {
+            "type": ["string", "null"]
+          },
+          "privacy": {
+            "type": ["string", "null"]
+          },
+          "created": {
+            "type": "integer"
+          },
+          "updated": {
+            "type": ["integer", "null"]
+          },
+          "start": {
+            "type": "integer"
+          },
+          "end": {
+            "type": "integer"
+          },
+          "snapshot": {
+            "type": ["integer", "null"]
+          },
+          "network": {
+            "type": "string"
+          },
+          "symbol": {
+            "type": ["string", "null"]
+          },
+          "choices": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "labels": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "quorum": {
+            "type": "number"
+          },
+          "quorumType": {
+            "type": ["string", "null"]
+          },
+          "strategies": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StrategyRef"
+            }
+          },
+          "validation": {
+            "type": ["string", "null"]
+          },
+          "results": {
+            "type": "object",
+            "required": ["scoresState", "scoresTotal", "choices"],
+            "properties": {
+              "scoresState": {
+                "type": ["string", "null"]
+              },
+              "scoresTotal": {
+                "type": ["number", "null"]
+              },
+              "scoresUpdated": {
+                "type": ["integer", "null"]
+              },
+              "votes": {
+                "type": ["integer", "null"]
+              },
+              "leading": {
+                "type": ["integer", "null"],
+                "description": "Choice with the highest score (1-based); null when there is no score yet, scores are hidden (shutter) or several choices tie."
+              },
+              "choices": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ChoiceResult"
+                }
+              }
+            }
+          },
+          "discussion": {
+            "type": ["string", "null"]
+          },
+          "app": {
+            "type": ["string", "null"]
+          },
+          "flagged": {
+            "type": "boolean"
+          },
+          "link": {
+            "type": "string",
+            "format": "uri"
+          },
+          "body": {
+            "type": "string",
+            "description": "Markdown. Only with include=body."
+          }
+        }
+      },
+      "Vote": {
+        "type": "object",
+        "required": ["id", "voter", "choice", "choiceLabel", "vp", "created"],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "voter": {
+            "type": "string"
+          },
+          "choice": {
+            "description": "Number, array of numbers, object of index to weight, or encrypted hex string (shutter, before close).",
+            "oneOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "integer"
+                }
+              },
+              {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "number"
+                }
+              },
+              {
+                "type": "string"
+              }
+            ]
+          },
+          "choiceLabel": {
+            "type": ["string", "null"],
+            "description": "Label of the chosen option for single-choice and basic proposals; null otherwise."
+          },
+          "vp": {
+            "type": "number"
+          },
+          "vpByStrategy": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          },
+          "vpState": {
+            "type": ["string", "null"]
+          },
+          "created": {
+            "type": "integer"
+          },
+          "reason": {
+            "type": ["string", "null"]
+          },
+          "app": {
+            "type": ["string", "null"]
+          }
+        }
+      },
+      "VoteList": {
+        "type": "object",
+        "required": [
+          "proposal",
+          "orderBy",
+          "first",
+          "skip",
+          "total",
+          "hasMore",
+          "next",
+          "items"
+        ],
+        "properties": {
+          "proposal": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "space": {
+                "type": ["string", "null"]
+              },
+              "state": {
+                "type": "string"
+              },
+              "type": {
+                "type": ["string", "null"]
+              },
+              "privacy": {
+                "type": ["string", "null"]
+              },
+              "choices": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": ["id", "space", "state", "type", "privacy", "choices"]
+          },
+          "orderBy": {
+            "type": "string",
+            "enum": ["vp", "created"]
+          },
+          "first": {
+            "type": "integer"
+          },
+          "skip": {
+            "type": "integer"
+          },
+          "total": {
+            "type": "integer",
+            "description": "Number of votes on the proposal."
+          },
+          "hasMore": {
+            "type": "boolean",
+            "description": "True when another page may exist."
+          },
+          "next": {
+            "type": ["string", "null"],
+            "description": "Relative URL of the next page, or null (last page, or past skip 5000)."
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Vote"
+            }
+          }
+        }
+      },
+      "VotingPower": {
+        "type": "object",
+        "required": [
+          "voter",
+          "space",
+          "vp",
+          "vpState",
+          "vpByStrategy",
+          "snapshot"
+        ],
+        "properties": {
+          "voter": {
+            "type": "string"
+          },
+          "space": {
+            "type": "string"
+          },
+          "proposal": {
+            "type": ["string", "null"]
+          },
+          "network": {
+            "type": "string"
+          },
+          "snapshot": {
+            "oneOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "const": "latest"
+              }
+            ],
+            "description": "Block used for the computation."
+          },
+          "vp": {
+            "type": "number"
+          },
+          "vpState": {
+            "type": "string",
+            "enum": ["final", "pending"]
+          },
+          "vpByStrategy": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["name", "vp"],
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "symbol": {
+                  "type": ["string", "null"]
+                },
+                "network": {
+                  "type": ["string", "null"]
+                },
+                "vp": {
+                  "type": "number"
+                }
+              }
+            }
+          }
+        }
+      },
+      "ServiceInfo": {
+        "type": "object",
+        "required": [
+          "name",
+          "description",
+          "version",
+          "testnet",
+          "payment",
+          "routes",
+          "free",
+          "links"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "testnet": {
+            "type": "boolean"
+          },
+          "payment": {
+            "type": "object",
+            "required": [
+              "protocol",
+              "x402Version",
+              "scheme",
+              "network",
+              "asset",
+              "currency",
+              "payTo",
+              "facilitator",
+              "howTo"
+            ],
+            "properties": {
+              "protocol": {
+                "const": "x402"
+              },
+              "x402Version": {
+                "const": 2
+              },
+              "scheme": {
+                "const": "exact"
+              },
+              "network": {
+                "type": "string"
+              },
+              "asset": {
+                "type": "string"
+              },
+              "currency": {
+                "const": "USDC"
+              },
+              "payTo": {
+                "type": "string"
+              },
+              "facilitator": {
+                "type": "string",
+                "format": "uri"
+              },
+              "alternatives": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["network", "currency", "payTo"],
+                  "properties": {
+                    "network": {
+                      "type": "string"
+                    },
+                    "currency": {
+                      "type": "string"
+                    },
+                    "payTo": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "howTo": {
+                "type": "string"
+              }
+            }
+          },
+          "routes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["method", "path", "example", "price", "description"],
+              "properties": {
+                "method": {
+                  "const": "GET"
+                },
+                "path": {
+                  "type": "string"
+                },
+                "example": {
+                  "type": "string",
+                  "format": "uri"
+                },
+                "price": {
+                  "type": "string",
+                  "description": "USDC per request."
+                },
+                "description": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "free": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "links": {
+            "type": "object",
+            "required": [
+              "openapi",
+              "llms",
+              "snapshot",
+              "x402",
+              "bazaar",
+              "source"
+            ],
+            "properties": {
+              "openapi": {
+                "type": "string",
+                "format": "uri"
+              },
+              "llms": {
+                "type": "string",
+                "format": "uri"
+              },
+              "snapshot": {
+                "type": "string",
+                "format": "uri"
+              },
+              "x402": {
+                "type": "string",
+                "format": "uri"
+              },
+              "bazaar": {
+                "type": "string",
+                "format": "uri"
+              },
+              "source": {
+                "type": "string",
+                "format": "uri"
+              }
+            }
+          }
+        }
+      },
+      "PaymentRequirements": {
+        "type": "object",
+        "required": [
+          "scheme",
+          "network",
+          "asset",
+          "amount",
+          "payTo",
+          "maxTimeoutSeconds",
+          "extra"
+        ],
+        "properties": {
+          "scheme": {
+            "const": "exact"
+          },
+          "network": {
+            "type": "string",
+            "examples": [
+              "algorand:wGHE2Pwdvd7S12BL5FaOP20EGYesN73ktiC1qzkkit8="
+            ]
+          },
+          "asset": {
+            "type": "string",
+            "examples": ["31566704"]
+          },
+          "amount": {
+            "type": "string",
+            "description": "Atomic units (USDC has 6 decimals: 10000 = 0.01 USDC)."
+          },
+          "payTo": {
+            "type": "string"
+          },
+          "maxTimeoutSeconds": {
+            "type": "integer"
+          },
+          "extra": {
+            "type": "object",
+            "description": "Includes feePayer (facilitator pays fees) and tag."
+          }
+        }
+      },
+      "PaymentRequired": {
+        "type": "object",
+        "required": ["x402Version", "resource", "accepts"],
+        "properties": {
+          "x402Version": {
+            "const": 2
+          },
+          "error": {
+            "type": "string"
+          },
+          "resource": {
+            "type": "object",
+            "required": ["url"],
+            "properties": {
+              "url": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "mimeType": {
+                "type": "string"
+              },
+              "serviceName": {
+                "type": "string"
+              },
+              "tags": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "accepts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PaymentRequirements"
+            }
+          },
+          "extensions": {
+            "type": "object"
+          }
+        },
+        "example": {
+          "x402Version": 2,
+          "resource": {
+            "url": "https://<host>/v1/spaces/ens.eth",
+            "description": "Snapshot space profile",
+            "mimeType": "application/json"
+          },
+          "accepts": [
+            {
+              "scheme": "exact",
+              "network": "algorand:wGHE2Pwdvd7S12BL5FaOP20EGYesN73ktiC1qzkkit8=",
+              "asset": "31566704",
+              "amount": "10000",
+              "payTo": "YOUR_ALGORAND_PAYTO_ADDRESS",
+              "maxTimeoutSeconds": 300,
+              "extra": {
+                "feePayer": "ZMFK2OI7ZBD2U27ISERZC4S6LKM6WMFJPZQ4MYNJDZ2VNBNMBA67RA22AA",
+                "tag": "x402-global-challenge"
+              }
+            }
+          ]
+        }
+      },
+      "SettleResponse": {
+        "type": "object",
+        "required": ["success", "transaction", "network"],
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "transaction": {
+            "type": "string",
+            "description": "Algorand transaction id."
+          },
+          "network": {
+            "type": "string"
+          },
+          "payer": {
+            "type": "string"
+          },
+          "errorReason": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

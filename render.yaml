@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: snapshot-x402
+    runtime: docker
+    plan: starter
+    healthCheckPath: /healthz
+    envVars:
+      - key: X402_NETWORK
+        value: algorand:wGHE2Pwdvd7S12BL5FaOP20EGYesN73ktiC1qzkkit8=
+      - key: X402_FACILITATOR_URL
+        value: https://facilitator.goplausible.xyz
+      - key: X402_PAY_TO
+        sync: false
+      - key: SNAPSHOT_API_KEY
+        sync: false
+      - key: PUBLIC_URL
+        sync: false

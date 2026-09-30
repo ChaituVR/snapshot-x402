@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: yarn
+      - run: yarn install --frozen-lockfile
+      - run: yarn lint
+      - run: yarn typecheck
+      - run: yarn test
+      - run: yarn build
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t snapshot-x402 .
+      - run: |
+          docker run -d --name api -p 8080:8080 \
+            -e X402_NETWORK='algorand:SGO1GKSzyE7IEPItTxCByw9x8FmnrCDexi9/cOUJOiI=' \
+            -e X402_PAY_TO=M57WFAJXLE2RO2HL3LNAT5I2FGP2ZJ4DK6HDDAKFNPWKAATTJYFPRACHUE \
+            snapshot-x402
+          for i in $(seq 1 30); do curl -fsS localhost:8080/healthz && break; sleep 1; done
+          curl -fsS localhost:8080/og.png -o /dev/null
+          test "$(curl -s -o /dev/null -w '%{http_code}' localhost:8080/v1/spaces/ens.eth)" = 402
+      - if: always()
+        run: docker logs api

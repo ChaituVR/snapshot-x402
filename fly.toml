@@ -1,0 +1,27 @@
+app = "snapshot-x402"
+primary_region = "iad"
+
+[build]
+
+[env]
+  PORT = "8080"
+  X402_NETWORK = "algorand:wGHE2Pwdvd7S12BL5FaOP20EGYesN73ktiC1qzkkit8="
+  X402_FACILITATOR_URL = "https://facilitator.goplausible.xyz"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    grace_period = "10s"
+    interval = "30s"
+    method = "GET"
+    path = "/healthz"
+    timeout = "5s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

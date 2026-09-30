@@ -1,0 +1,92 @@
+{
+  "data": {
+    "proposal": {
+      "id": "0xcd8d33f6531ed3baa3f728ca8509c66ce7505877b349e6127981e8254adf9a22",
+      "ipfs": "bafkreiftmhkpaoyid4dz5a6icu4xodjhnozowuvp7d32wa2ne4tchdzkhu",
+      "title": "[ARFC] Unified Handling of the Isolated Flag in Aave V3.7 E-Modes",
+      "author": "0xb291232F480F41c75802C4a60F1D2AC03404Afef",
+      "created": 1789998885,
+      "updated": null,
+      "start": 1790085285,
+      "end": 1790344485,
+      "snapshot": 26026309,
+      "state": "closed",
+      "type": "basic",
+      "choices": ["For", "Against", "Abstain"],
+      "labels": [],
+      "quorum": 0,
+      "quorumType": "default",
+      "privacy": "",
+      "network": "1",
+      "symbol": "AAVE",
+      "discussion": "https://governance.aave.com/t/arfc-unified-handling-of-the-isolated-flag-in-aave-v3-7-e-modes/25621",
+      "app": "snapshot-v2",
+      "link": "https://snapshot.box/#/s:aavedao.eth/proposal/0xcd8d33f6531ed3baa3f728ca8509c66ce7505877b349e6127981e8254adf9a22",
+      "flagged": false,
+      "scores": [357216.4434339354, 0, 0.007875939307834172],
+      "scores_by_strategy": [
+        [0, 357216.4434339354],
+        [0, 0],
+        [0, 0.007875939307834172]
+      ],
+      "scores_state": "final",
+      "scores_total": 357216.45130987465,
+      "scores_updated": 1790344545,
+      "votes": 97,
+      "strategies": [
+        {
+          "name": "contract-call",
+          "network": "1",
+          "params": {
+            "args": ["%{address}"],
+            "symbol": "AAVE in stkBPT",
+            "address": "0xC0259c59D9f980E3b5e2574cD78C9A9Bc6A8E3fc",
+            "decimals": 18,
+            "methodABI": {
+              "name": "balanceOf",
+              "type": "function",
+              "inputs": [
+                {
+                  "name": "account",
+                  "type": "address",
+                  "internalType": "address"
+                }
+              ],
+              "outputs": [
+                { "name": "", "type": "uint256", "internalType": "uint256" }
+              ],
+              "stateMutability": "view"
+            }
+          }
+        },
+        {
+          "name": "contract-call",
+          "network": "1",
+          "params": {
+            "args": ["%{address}"],
+            "symbol": "AAVE gov V3 Voting Power",
+            "address": "0xa198Fac58E02A5C5F8F7e877895d50cFa9ad1E04",
+            "decimals": 18,
+            "methodABI": {
+              "name": "getFullVotingPower",
+              "type": "function",
+              "inputs": [
+                {
+                  "name": "account",
+                  "type": "address",
+                  "internalType": "address"
+                }
+              ],
+              "outputs": [
+                { "name": "", "type": "uint256", "internalType": "uint256" }
+              ],
+              "stateMutability": "view"
+            }
+          }
+        }
+      ],
+      "validation": { "name": "any" },
+      "space": { "id": "aavedao.eth", "name": "Aave DAO", "verified": true }
+    }
+  }
+}

@@ -1,0 +1,28 @@
+name: TestNet payment
+
+on:
+  workflow_dispatch:
+
+jobs:
+  pay:
+    runs-on: ubuntu-latest
+    env:
+      X402_NETWORK: algorand:SGO1GKSzyE7IEPItTxCByw9x8FmnrCDexi9/cOUJOiI=
+      X402_PAY_TO: ${{ vars.TESTNET_PAY_TO }}
+      SNAPSHOT_API_KEY: ${{ secrets.SNAPSHOT_API_KEY }}
+      ALGORAND_BUYER_MNEMONIC: ${{ secrets.TESTNET_BUYER_MNEMONIC }}
+      PORT: 3000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: yarn
+      - run: yarn install --frozen-lockfile
+      - run: yarn build
+      - run: node dist/index.js > server.log 2>&1 &
+      - run: for i in $(seq 1 30); do curl -fsS localhost:3000/healthz && break; sleep 1; done
+      - run: yarn account status buyer
+      - run: yarn client
+      - if: always()
+        run: cat server.log

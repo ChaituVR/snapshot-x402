@@ -1,0 +1,51 @@
+{
+  "data": {
+    "proposal": {
+      "id": "0xcd8d33f6531ed3baa3f728ca8509c66ce7505877b349e6127981e8254adf9a22",
+      "state": "closed",
+      "type": "basic",
+      "privacy": "",
+      "choices": ["For", "Against", "Abstain"],
+      "votes": 97,
+      "scores_state": "final",
+      "space": {
+        "id": "aavedao.eth"
+      }
+    },
+    "votes": [
+      {
+        "id": "0x6c763b0de137ac2760123607312aad08c760fd1d2c5d89ce13ef0e2906459043",
+        "voter": "0x3320756d61303284B8012A660Ee185C58EDd3BB7",
+        "created": 1790183180,
+        "choice": 1,
+        "vp": 107243.98459054,
+        "vp_by_strategy": [0, 107243.98459054],
+        "vp_state": "final",
+        "reason": "",
+        "app": "snapshot-v2"
+      },
+      {
+        "id": "0x3699b6127e19dcb3c18bd3a1bc4b926738f4c04e1f39ef0adad9a1612922abf0",
+        "voter": "0x2cc1ADE245020FC5AAE66Ad443e1F66e01c54Df1",
+        "created": 1790241191,
+        "choice": 1,
+        "vp": 88894.29504875,
+        "vp_by_strategy": [0, 88894.29504875],
+        "vp_state": "final",
+        "reason": "",
+        "app": "snapshot-v2"
+      },
+      {
+        "id": "0x70e97b59fda685dd31cdfeac0cb22458282a55709e11f57b23ef98384a100118",
+        "voter": "0x8b37a5Af68D315cf5A64097D96621F64b5502a22",
+        "created": 1790241675,
+        "choice": 1,
+        "vp": 75925.73242588,
+        "vp_by_strategy": [0, 75925.73242588],
+        "vp_state": "final",
+        "reason": "",
+        "app": "snapshot-v2"
+      }
+    ]
+  }
+}

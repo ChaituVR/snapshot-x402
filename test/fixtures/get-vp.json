@@ -1,0 +1,10 @@
+{
+  "jsonrpc": "2.0",
+  "result": {
+    "vp": 107243.98459054,
+    "vp_by_strategy": [0, 107243.98459054],
+    "vp_state": "final"
+  },
+  "id": null,
+  "cache": true
+}

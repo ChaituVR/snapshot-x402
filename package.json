@@ -1,0 +1,51 @@
+{
+  "name": "snapshot-x402",
+  "version": "1.0.0",
+  "description": "Pay-per-request Snapshot governance data for agents, paid in USDC on Algorand with x402",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/index.js",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "typecheck": "tsc --noEmit",
+    "test": "jest",
+    "client": "tsx scripts/client.ts",
+    "account": "tsx scripts/account.ts"
+  },
+  "dependencies": {
+    "@x402/avm": "2.28.0",
+    "@x402/core": "2.28.0",
+    "@x402/evm": "2.28.0",
+    "@x402/express": "2.28.0",
+    "@x402/extensions": "2.28.0",
+    "cors": "^2.8.5",
+    "express": "^5.2.1",
+    "express-rate-limit": "^8.1.0"
+  },
+  "devDependencies": {
+    "@snapshot-labs/eslint-config": "^0.1.1",
+    "@snapshot-labs/prettier-config": "^0.1.0",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^22.20.4",
+    "@types/supertest": "^7.2.0",
+    "@x402/fetch": "2.28.0",
+    "ajv": "^8.17.1",
+    "algosdk": "^3.8.0",
+    "eslint": "^9.39.0",
+    "jest": "^30.0.0",
+    "prettier": "^3.6.0",
+    "supertest": "^7.1.0",
+    "ts-jest": "^29.4.0",
+    "tsx": "^4.20.0",
+    "typescript": "~5.9.3"
+  },
+  "prettier": "@snapshot-labs/prettier-config",
+  "engines": {
+    "node": ">=22.13"
+  }
+}

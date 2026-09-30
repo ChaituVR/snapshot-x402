@@ -1,0 +1,88 @@
+{
+  "data": {
+    "space": {
+      "id": "ens.eth",
+      "name": "ENS",
+      "about": "",
+      "network": "1",
+      "symbol": "ENS",
+      "avatar": "ipfs://QmSL2X1h1uk26ahSALTw2qKyc61VaySRRstueVMm1Aym3e",
+      "website": null,
+      "twitter": "ensdomains",
+      "github": "ensdomains",
+      "coingecko": "ethereum-name-service",
+      "verified": true,
+      "flagged": false,
+      "hibernated": false,
+      "turbo": true,
+      "admins": [
+        "0xb8c2c29ee19d8307cb7255e1cd9cbde883a267d5",
+        "0xb6e040c9ecaae172a89bd561c5f73e1c48d28cd9",
+        "0x9297a132af2a1481441ab8dc1ce6e243d879eafd"
+      ],
+      "moderators": [],
+      "members": [
+        "0x5a384227b65fa093dec03ec34e111db80a040615",
+        "0x866b3c4994e1416b7c738b9818b31dc246b95eee",
+        "0x0904dac3347ea47d208f3fd67402d039a3b99859",
+        "0xd2cc2e47c2aecd01c87b83290c0ee76ba67a7211",
+        "0xe3919f3f971c4589089daa930aafa81b8a27b406",
+        "0x51050ec063d393217b436747617ad1c2285aeeee"
+      ],
+      "strategies": [
+        {
+          "name": "delegation",
+          "network": "1",
+          "params": {
+            "symbol": "ENS (delegated)",
+            "strategies": [
+              {
+                "name": "erc20-votes",
+                "params": {
+                  "symbol": "ENS",
+                  "address": "0xC18360217D8F7Ab5e7c516566761Ea12Ce7F9D72",
+                  "decimals": 18
+                }
+              }
+            ]
+          }
+        },
+        {
+          "name": "erc20-votes",
+          "network": "1",
+          "params": {
+            "symbol": "ENS",
+            "address": "0xC18360217D8F7Ab5e7c516566761Ea12Ce7F9D72",
+            "decimals": 18
+          }
+        }
+      ],
+      "validation": { "name": "basic" },
+      "voteValidation": { "name": "any" },
+      "voting": {
+        "delay": null,
+        "period": 432000,
+        "type": null,
+        "quorum": null,
+        "quorumType": "default",
+        "blind": false,
+        "privacy": "any"
+      },
+      "activeProposals": 0,
+      "proposalsCount": 98,
+      "proposalsCount30d": 0,
+      "followersCount": 143061,
+      "votesCount": 126507,
+      "votesCount7d": 0,
+      "treasuries": [],
+      "delegationPortal": {
+        "delegationType": "compound-governor",
+        "delegationContract": "0xC18360217D8F7Ab5e7c516566761Ea12Ce7F9D72",
+        "delegationNetwork": "1"
+      },
+      "parent": null,
+      "children": [{ "id": "wg.ensnominations.eth" }],
+      "created": 1619993265
+    }
+  }
+}

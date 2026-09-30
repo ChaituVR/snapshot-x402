@@ -1,0 +1,211 @@
+{
+  "space": {
+    "id": "ens.eth",
+    "name": "ENS",
+    "about": null,
+    "network": "1",
+    "symbol": "ENS",
+    "avatar": "ipfs://QmSL2X1h1uk26ahSALTw2qKyc61VaySRRstueVMm1Aym3e",
+    "website": null,
+    "twitter": "ensdomains",
+    "github": "ensdomains",
+    "coingecko": "ethereum-name-service",
+    "verified": true,
+    "flagged": false,
+    "hibernated": false,
+    "turbo": true,
+    "admins": ["0xb8c2c29ee19d8307cb7255e1cd9cbde883a267d5"],
+    "moderators": [],
+    "membersCount": 6,
+    "strategies": [
+      {
+        "name": "delegation",
+        "network": "1",
+        "symbol": "ENS (delegated)"
+      },
+      {
+        "name": "erc20-votes",
+        "network": "1",
+        "symbol": "ENS"
+      }
+    ],
+    "proposalValidation": "basic",
+    "voteValidation": "any",
+    "voting": {
+      "delay": null,
+      "period": 432000,
+      "type": null,
+      "quorum": null,
+      "quorumType": "default",
+      "blind": false,
+      "privacy": "any"
+    },
+    "stats": {
+      "activeProposals": 0,
+      "proposals": 98,
+      "proposals30d": 0,
+      "followers": 143061,
+      "votes": 126507,
+      "votes7d": 0
+    },
+    "treasuries": [],
+    "delegationPortal": {
+      "delegationType": "compound-governor",
+      "delegationContract": "0xC18360217D8F7Ab5e7c516566761Ea12Ce7F9D72",
+      "delegationNetwork": "1"
+    },
+    "parent": null,
+    "children": ["wg.ensnominations.eth"],
+    "created": 1619993265,
+    "link": "https://snapshot.box/#/s:ens.eth"
+  },
+  "proposals": {
+    "space": "aavedao.eth",
+    "state": "active",
+    "first": 1,
+    "skip": 0,
+    "hasMore": true,
+    "next": "/v1/spaces/aavedao.eth/proposals?state=active&first=1&skip=1",
+    "items": [
+      {
+        "id": "0x1263de6a670a74faa98e422b7b77865e9b92870818b446ef0959f43823562c12",
+        "title": "[ARFC] Onboard HINC to Aave Horizon",
+        "author": "0x66a28531E6f390A8CD44aB0C57a0F1aeb7E673FF",
+        "state": "active",
+        "type": "basic",
+        "privacy": null,
+        "created": 1790610682,
+        "start": 1790697082,
+        "end": 1790956282,
+        "snapshot": 26076959,
+        "choices": ["For", "Against", "Abstain"],
+        "scores": [654.13, 208.54, 0],
+        "scoresTotal": 862.67,
+        "scoresState": "pending",
+        "votes": 38,
+        "quorum": 0,
+        "quorumType": "default",
+        "flagged": false,
+        "link": "https://snapshot.box/#/s:aavedao.eth/proposal/0x1263de6a670a74faa98e422b7b77865e9b92870818b446ef0959f43823562c12"
+      }
+    ]
+  },
+  "proposal": {
+    "id": "0xcd8d33f6531ed3baa3f728ca8509c66ce7505877b349e6127981e8254adf9a22",
+    "ipfs": "bafkreiftmhkpaoyid4dz5a6icu4xodjhnozowuvp7d32wa2ne4tchdzkhu",
+    "space": "aavedao.eth",
+    "spaceName": "Aave DAO",
+    "spaceVerified": true,
+    "title": "[ARFC] Unified Handling of the Isolated Flag in Aave V3.7 E-Modes",
+    "author": "0xb291232F480F41c75802C4a60F1D2AC03404Afef",
+    "state": "closed",
+    "type": "basic",
+    "privacy": null,
+    "created": 1789998885,
+    "updated": null,
+    "start": 1790085285,
+    "end": 1790344485,
+    "snapshot": 26026309,
+    "network": "1",
+    "symbol": "AAVE",
+    "choices": ["For", "Against", "Abstain"],
+    "labels": [],
+    "quorum": 0,
+    "quorumType": "default",
+    "strategies": [
+      {
+        "name": "contract-call",
+        "network": "1",
+        "symbol": "AAVE gov V3 Voting Power"
+      }
+    ],
+    "validation": "any",
+    "results": {
+      "scoresState": "final",
+      "scoresTotal": 357216.45,
+      "scoresUpdated": 1790344545,
+      "votes": 97,
+      "leading": 1,
+      "choices": [
+        {
+          "choice": 1,
+          "label": "For",
+          "score": 357216.44,
+          "share": 1.0,
+          "scoreByStrategy": [357216.44]
+        },
+        {
+          "choice": 2,
+          "label": "Against",
+          "score": 0,
+          "share": 0.0,
+          "scoreByStrategy": [0]
+        },
+        {
+          "choice": 3,
+          "label": "Abstain",
+          "score": 0.01,
+          "share": 0.0,
+          "scoreByStrategy": [0.01]
+        }
+      ]
+    },
+    "discussion": "https://governance.aave.com/t/25621",
+    "app": "snapshot-v2",
+    "flagged": false,
+    "link": "https://snapshot.box/#/s:aavedao.eth/proposal/0xcd8d33f6531ed3baa3f728ca8509c66ce7505877b349e6127981e8254adf9a22"
+  },
+  "votes": {
+    "proposal": {
+      "id": "0xcd8d33f6531ed3baa3f728ca8509c66ce7505877b349e6127981e8254adf9a22",
+      "space": "aavedao.eth",
+      "state": "closed",
+      "type": "basic",
+      "privacy": null,
+      "choices": ["For", "Against", "Abstain"]
+    },
+    "orderBy": "vp",
+    "first": 1,
+    "skip": 0,
+    "total": 97,
+    "hasMore": true,
+    "next": "/v1/proposals/0xcd8d33f6531ed3baa3f728ca8509c66ce7505877b349e6127981e8254adf9a22/votes?orderBy=vp&first=1&skip=1",
+    "items": [
+      {
+        "id": "0x6c763b0de137ac2760123607312aad08c760fd1d2c5d89ce13ef0e2906459043",
+        "voter": "0x3320756d61303284B8012A660Ee185C58EDd3BB7",
+        "choice": 1,
+        "choiceLabel": "For",
+        "vp": 107243.98459054,
+        "vpByStrategy": [0, 107243.98459054],
+        "vpState": "final",
+        "created": 1790183180,
+        "reason": null,
+        "app": "snapshot-v2"
+      }
+    ]
+  },
+  "vp": {
+    "voter": "0x3320756d61303284b8012a660ee185c58edd3bb7",
+    "space": "aavedao.eth",
+    "proposal": "0xcd8d33f6531ed3baa3f728ca8509c66ce7505877b349e6127981e8254adf9a22",
+    "network": "1",
+    "snapshot": 26026309,
+    "vp": 107243.98459054,
+    "vpState": "final",
+    "vpByStrategy": [
+      {
+        "name": "contract-call",
+        "symbol": "AAVE in stkBPT",
+        "network": "1",
+        "vp": 0
+      },
+      {
+        "name": "contract-call",
+        "symbol": "AAVE gov V3 Voting Power",
+        "network": "1",
+        "vp": 107243.98459054
+      }
+    ]
+  }
+}

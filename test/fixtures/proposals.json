@@ -1,0 +1,28 @@
+{
+  "data": {
+    "space": { "id": "aavedao.eth" },
+    "proposals": [
+      {
+        "id": "0x1263de6a670a74faa98e422b7b77865e9b92870818b446ef0959f43823562c12",
+        "title": "[ARFC] Onboard HINC (Neuberger Securitize High Income Tokenized Fund) to Aave Horizon",
+        "author": "0x66a28531E6f390A8CD44aB0C57a0F1aeb7E673FF",
+        "created": 1790610682,
+        "start": 1790697082,
+        "end": 1790956282,
+        "snapshot": 26076959,
+        "state": "active",
+        "type": "basic",
+        "choices": ["For", "Against", "Abstain"],
+        "scores": [654.1263708748131, 208.53871152164749, 0],
+        "scores_total": 862.6650823964607,
+        "scores_state": "pending",
+        "votes": 38,
+        "quorum": 0,
+        "quorumType": "default",
+        "privacy": "",
+        "flagged": false,
+        "link": "https://snapshot.box/#/s:aavedao.eth/proposal/0x1263de6a670a74faa98e422b7b77865e9b92870818b446ef0959f43823562c12"
+      }
+    ]
+  }
+}
