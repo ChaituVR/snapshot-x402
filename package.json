@@ -39,7 +39,7 @@
     "eslint": "^9.39.0",
     "jest": "^30.0.0",
     "prettier": "^3.6.0",
-    "supertest": "^7.1.0",
+    "supertest": "^7.3.1",
     "ts-jest": "^29.4.0",
     "tsx": "^4.20.0",
     "typescript": "~5.9.3"
